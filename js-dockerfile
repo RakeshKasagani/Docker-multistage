@@ -40,4 +40,4 @@ COPY --from=builder /app ./
 EXPOSE 3000
 
 # Start the Node.js application. Ensure server.js exists or change to the correct entry point.
-CMD ["node", "server.js"]
+CMD ["npm", "start"]
