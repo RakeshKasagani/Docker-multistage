@@ -3,20 +3,24 @@
 # -------------------------------
 FROM node:18 AS builder
 
-# Create app folder
+# Set working directory
 WORKDIR /app
 
-# Copy package files first (better caching)
+# Copy package files first to leverage Docker cache
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install --production=false
+# Install all dependencies (dev + prod) reproducibly
+RUN npm ci
 
-# Copy all source code
+# Copy app source
 COPY . .
 
-# If you have a build step (React, TypeScript, etc.)
-# RUN npm run build
+# If you have a build step (React, TypeScript, etc.), run it automatically *only if* package.json has a build script.
+# This avoids failing when there's no build script.
+RUN if grep -q "\"build\"" package.json; then npm run build; fi
+
+# Remove devDependencies so node_modules only contains production deps (keeps final image small)
+RUN npm prune --production
 
 
 # -------------------------------
@@ -26,12 +30,14 @@ FROM node:18-slim
 
 WORKDIR /app
 
-# Only copy node_modules & built code (smaller image)
+# Set production environment
+ENV NODE_ENV=production
+# Copy production node_modules and the app files
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app ./
 
-# Expose app port (change if needed)
+# Expose application port (change if your app uses a different port)
 EXPOSE 3000
 
-# Start the Node.js application
+# Start the Node.js application. Ensure server.js exists or change to the correct entry point.
 CMD ["node", "server.js"]
