@@ -1,43 +1,37 @@
-# -------------------------------
-# STAGE 1 — Build / Install
-# -------------------------------
+# Multi-stage Dockerfile for a Vite + React app (production)
+# Builder stage: install deps and build the static assets
 FROM node:18 AS builder
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files first to leverage Docker cache
+# copy package files first for better caching
 COPY package*.json ./
 
-# Install all dependencies (dev + prod) reproducibly
-RUN npm ci
+# install dev deps too (needed for build)
+RUN npm install --production=false
 
-# Copy app source
+# copy source and build
 COPY . .
-
-# If you have a build step (React, TypeScript, etc.), run it automatically *only if* package.json has a build script.
-# This avoids failing when there's no build script.
-RUN if grep -q "\"build\"" package.json; then npm run build; fi
-
-# Remove devDependencies so node_modules only contains production deps (keeps final image small)
-RUN npm prune --production
-
+RUN npm run build
 
 # -------------------------------
-# STAGE 2 — Production Runtime
+# Stage 2 — Production runtime
 # -------------------------------
-FROM node:18-slim
+FROM node:18-slim AS runtime
 
 WORKDIR /app
 
-# Set production environment
-ENV NODE_ENV=production
-# Copy production node_modules and the app files
+# copy only the built assets and node_modules from the builder
+COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app ./
+COPY --from=builder /app/package.json ./package.json
 
-# Expose application port (change if your app uses a different port)
+# expose the port the app will run on inside container
 EXPOSE 3000
 
-# Start the Node.js application. Ensure server.js exists or change to the correct entry point.
+# make sure app listens on 0.0.0.0 (your package.json should have a start script using `vite preview --port 3000 --host`)
+ENV PORT=3000
+ENV HOST=0.0.0.0
+
+# start the preview server (uses the start script in package.json)
 CMD ["npm", "start"]
